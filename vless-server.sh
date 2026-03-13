@@ -10528,6 +10528,28 @@ start_services() {
     return 0
 }
 
+ensure_singbox_runtime_consistency() {
+    local singbox_protocols=$(get_singbox_protocols)
+    [[ -z "$singbox_protocols" ]] && return 0
+    check_cmd sing-box || return 0
+
+    local need_rebuild=false
+    [[ ! -f "$CFG/singbox.json" ]] && need_rebuild=true
+
+    if [[ "$need_rebuild" == "false" ]] && ! /usr/local/bin/sing-box check -c "$CFG/singbox.json" >/dev/null 2>&1; then
+        need_rebuild=true
+    fi
+
+    if [[ "$need_rebuild" == "true" ]]; then
+        _info "检测到 Sing-box 配置缺失或无效，正在自动重建..."
+        generate_singbox_config || return 1
+        create_server_scripts
+        create_singbox_service
+        svc restart vless-singbox || return 1
+        _ok "Sing-box 配置已自动修复"
+    fi
+}
+
 stop_services() {
     local stopped_services=()
     
@@ -24859,6 +24881,7 @@ main_menu() {
     init_log  # 初始化日志
     init_db   # 初始化 JSON 数据库
     db_migrate_to_multiuser  # 迁移旧的单用户配置到多用户格式
+    ensure_singbox_runtime_consistency 2>/dev/null || true
 
     # 自动更新系统脚本 (确保 vless 命令始终是最新版本)
     _auto_update_system_script
