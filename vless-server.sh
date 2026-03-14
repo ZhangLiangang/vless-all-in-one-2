@@ -1297,10 +1297,10 @@ send_tg_message() {
 send_tg_expire_warning() {
     local name="$1" proto="$2" expire_date="$3" days_left="$4"
     local proto_name=$(get_protocol_name "$proto")
-    local hostname=$(hostname 2>/dev/null || echo "服务器")
+    local server_display=$(get_tg_server_display)
     
     local message="⚠️ *用户即将过期*
-🖥 服务器: \`$hostname\`
+${server_display}
 👤 用户: \`$name\`
 📋 协议: $proto_name
 📅 到期: $expire_date
@@ -1313,10 +1313,10 @@ send_tg_expire_warning() {
 send_tg_expired_notice() {
     local name="$1" proto="$2" expire_date="$3"
     local proto_name=$(get_protocol_name "$proto")
-    local hostname=$(hostname 2>/dev/null || echo "服务器")
+    local server_display=$(get_tg_server_display)
     
     local message="🚫 *用户已过期禁用*
-🖥 服务器: \`$hostname\`
+${server_display}
 👤 用户: \`$name\`
 📋 协议: $proto_name
 📅 到期: $expire_date"
@@ -1571,7 +1571,21 @@ readonly TG_CONFIG_FILE="$CFG/telegram.json"
 # 初始化 TG 配置
 init_tg_config() {
     [[ -f "$TG_CONFIG_FILE" ]] && return 0
-    echo '{"enabled":false,"bot_token":"","chat_id":"","notify_quota_percent":80,"notify_daily":false}' > "$TG_CONFIG_FILE"
+    echo '{"enabled":false,"bot_token":"","chat_id":"","notify_quota_percent":80,"notify_daily":false,"server_name":""}' > "$TG_CONFIG_FILE"
+}
+
+# 获取 TG 模板里的服务器显示文本
+get_tg_server_display() {
+    local server_name=$(tg_get_config "server_name")
+    local server_ip=$(get_ipv4)
+    [[ -z "$server_ip" ]] && server_ip=$(get_ipv6)
+    [[ -z "$server_ip" ]] && server_ip=$(hostname 2>/dev/null || echo "unknown")
+
+    if [[ -n "$server_name" ]]; then
+        printf '🔗 服务器: `%s`\n🌐 IP: `%s`' "$server_name" "$server_ip"
+    else
+        printf '🖥 服务器: `%s`' "$server_ip"
+    fi
 }
 
 # 获取 TG 配置
@@ -1616,11 +1630,11 @@ tg_send_message() {
 # 发送流量告警
 tg_send_quota_alert() {
     local user="$1" proto="$2" used="$3" quota="$4" percent="$5"
-    local server_ip=$(get_ipv4)
+    local server_display=$(get_tg_server_display)
     
     local message="⚠️ *流量告警*
 
-服务器: \`${server_ip}\`
+${server_display}
 协议: ${proto}
 用户: ${user}
 已用: $(format_bytes $used)
@@ -1633,11 +1647,11 @@ tg_send_quota_alert() {
 # 发送超限通知
 tg_send_over_quota() {
     local user="$1" proto="$2" used="$3" quota="$4"
-    local server_ip=$(get_ipv4)
+    local server_display=$(get_tg_server_display)
     
     local message="🚫 *流量超限*
 
-服务器: \`${server_ip}\`
+${server_display}
 协议: ${proto}
 用户: ${user}
 已用: $(format_bytes $used)
@@ -1652,11 +1666,10 @@ tg_send_over_quota() {
 # 注意: 此函数由 check_daily_report() 调用，而 check_daily_report() 由 sync_all_user_traffic() 调用
 # 因此不能在此函数内再次调用 sync_all_user_traffic()，否则会导致无限递归
 tg_send_daily_report() {
-    local server_ip=$(get_ipv4)
-    [[ -z "$server_ip" ]] && server_ip=$(get_ipv6)
+    local server_display=$(get_tg_server_display)
     
     local report="📊 *每日流量报告*
-服务器: \`${server_ip}\`
+${server_display}
 时间: $(date '+%Y-%m-%d %H:%M')
 ━━━━━━━━━━━━━━━━━━━━"
     
@@ -24188,6 +24201,7 @@ _configure_tg_notify() {
         local enabled=$(tg_get_config "enabled")
         local bot_token=$(tg_get_config "bot_token")
         local chat_id=$(tg_get_config "chat_id")
+        local server_name=$(tg_get_config "server_name")
         local daily_enabled=$(tg_get_config "notify_daily")
         local report_hour=$(tg_get_config "daily_report_hour")
         local report_minute=$(tg_get_config "daily_report_minute")
@@ -24217,11 +24231,13 @@ _configure_tg_notify() {
         echo -e "  每日报告: $daily_status"
         echo -e "  Bot Token: ${bot_token:+${G}已配置${NC}}${bot_token:-${D}未配置${NC}}"
         echo -e "  Chat ID: ${chat_id:+${G}$chat_id${NC}}${chat_id:-${D}未配置${NC}}"
+        echo -e "  服务器名: ${server_name:+${G}$server_name${NC}}${server_name:-${D}未设置${NC}}"
         _line
         
         _item "1" "设置 Bot Token"
         _item "2" "设置 Chat ID"
         _item "3" "测试发送"
+        _item "7" "设置服务器名 (回车留空)"
         if [[ "$enabled" == "true" ]]; then
             _item "4" "禁用通知"
         else
@@ -24269,6 +24285,19 @@ _configure_tg_notify() {
                         _err "发送失败，请检查配置"
                     fi
                     [[ "$current_enabled" != "true" ]] && tg_set_config "enabled" "false"
+                fi
+                _pause
+                ;;
+            7)
+                echo ""
+                echo -e "  ${D}可选，用于 TG 流量统计/告警模板显示机器备注；直接回车留空${NC}"
+                read -rp "  服务器名: " new_server_name
+                tg_set_config "server_name" "$new_server_name"
+                server_name="$new_server_name"
+                if [[ -n "$new_server_name" ]]; then
+                    _ok "服务器名已保存"
+                else
+                    _ok "服务器名已清空"
                 fi
                 _pause
                 ;;
