@@ -4140,12 +4140,15 @@ check_dependencies() {
         case "$DISTRO" in
             alpine)
                 apk update >/dev/null 2>&1
-                # Alpine 的二维码工具包名与 Debian/Ubuntu 不同，优先使用 qrencode，旧环境回退到 libqrencode-tools
-                apk add --no-cache curl jq openssl coreutils ca-certificates gawk cronie qrencode >/dev/null 2>&1 || \
-                apk add --no-cache curl jq openssl coreutils ca-certificates gawk cronie libqrencode-tools >/dev/null 2>&1
-                # 启动 crond 服务
-                rc-service crond start >/dev/null 2>&1
-                rc-update add crond default >/dev/null 2>&1
+                # Alpine 上 qrencode 命令来自 libqrencode-tools，不是 qrencode 包名
+                apk add --no-cache curl jq openssl coreutils ca-certificates gawk cronie libqrencode-tools >/dev/null 2>&1 || {
+                    _err "Alpine 依赖安装失败"
+                    _warn "请手动执行: apk add --no-cache curl jq openssl coreutils ca-certificates gawk cronie libqrencode-tools"
+                    return 1
+                }
+                # Alpine 可能是 busybox crond，也可能是 cronie 服务，两个都兼容一下
+                rc-service cronie start >/dev/null 2>&1 || rc-service crond start >/dev/null 2>&1 || true
+                rc-update add cronie default >/dev/null 2>&1 || rc-update add crond default >/dev/null 2>&1 || true
                 ;;
             centos)
                 yum install -y curl jq openssl ca-certificates qrencode cronie >/dev/null 2>&1
