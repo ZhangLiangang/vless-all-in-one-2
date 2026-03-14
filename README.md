@@ -7,6 +7,7 @@ It helps you quickly deploy and manage multiple protocols in one place, includin
 ## Documentation
 
 - **Website:** https://docs.vaiox.de/
+- **Telegram Group:** https://t.me/vless_vaio
 
 ## Features
 
