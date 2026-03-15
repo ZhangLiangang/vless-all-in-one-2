@@ -17987,6 +17987,7 @@ select_vless_mode() {
     _line
     _item "1" "VLESS + Reality ${D}(默认)${NC}"
     _item "2" "VLESS + Encryption ${D}(无TLS)${NC}"
+    _item "0" "返回主菜单"
     echo ""
 
     while true; do
@@ -17995,6 +17996,7 @@ select_vless_mode() {
         case "$vless_mode_choice" in
             1) VLESS_SECURITY_MODE="reality"; SELECTED_PROTOCOL="vless"; return 0 ;;
             2) VLESS_SECURITY_MODE="encryption"; SELECTED_PROTOCOL="vless"; return 0 ;;
+            0) SELECTED_PROTOCOL=""; return 1 ;;
             *) _err "无效选择" ;;
         esac
     done
@@ -18326,9 +18328,6 @@ do_install_server() {
                 echo -e "  模式: ${G}pure / native / 0rtt${NC}"
                 echo -e "  ${D}注: 请优先使用分享链接导入客户端${NC}"
                 _line
-                echo ""
-                read -rp "  确认安装? [Y/n]: " confirm
-                [[ "$confirm" =~ ^[nN]$ ]] && return
 
                 _info "生成配置..."
                 gen_vless_encryption_server_config "$uuid" "$port" "$decryption_config" "$encryption_config"
@@ -18363,9 +18362,6 @@ do_install_server() {
                     echo -e "  ${D}(订阅通过 Reality 端口访问)${NC}"
                 fi
                 _line
-                echo ""
-                read -rp "  确认安装? [Y/n]: " confirm
-                [[ "$confirm" =~ ^[nN]$ ]] && return
                 
                 _info "生成配置..."
                 gen_server_config "$uuid" "$port" "$privkey" "$pubkey" "$sid" "$final_sni"
